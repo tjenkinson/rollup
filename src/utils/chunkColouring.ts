@@ -1,133 +1,174 @@
+import ExternalModule from '../ExternalModule';
 import Module from '../Module';
-import {
-	cloneUint8Array,
-	randomUint8Array,
-	Uint8ArrayEqual,
-	Uint8ArrayXor
-	// copyUint8Array
-} from './entryHashing';
+import { randomUint8Array, Uint8ArrayXor } from './entryHashing';
 
-function randomColour(): Uint8Array {
-	return randomUint8Array(10);
-}
-
-function trailContainsColour(trail: Module[], colour: Uint8Array): boolean {
-	return trail.some(module => Uint8ArrayEqual(module.entryPointsHash, colour));
-}
-
-function arraysEqual<T>(a: Array<T>, b: Array<T>): boolean {
-	return a.length === b.length && a.every((item, i) => item === b[i]);
-}
+type DependentModuleMap = Map<Module, Set<Module>>;
 
 export function assignChunkColouringHashes(
 	entryModules: Module[],
 	manualChunkModules: Record<string, Module[]>
 ) {
-	const colouredModules: Set<Module> = new Set();
-
-	function paintModules(inputEntryModules: Array<{ paint: Uint8Array; rootModule: Module }>): void {
-		const entryModules: Array<{
-			paint: Uint8Array;
-			rootModule: Module;
-			trail: Module[];
-		}> = inputEntryModules.map(({ paint, rootModule }) => ({
-			paint,
-			rootModule,
-			trail: []
-		}));
-
-		function registerNewEntryPoint(module: Module, trail: Module[], paint: Uint8Array): void {
-			const alreadySeen =
-				trail.includes(module) ||
-				entryModules.some(entry => entry.rootModule === module && arraysEqual(entry.trail, trail));
-			if (!alreadySeen) {
-				entryModules.push({
-					paint,
-					rootModule: module,
-					trail
-				});
-			}
-		}
-
-		function _paintModule(rootModule: Module, trail: Module[], paint: Uint8Array): void {
-			const sourceColour = cloneUint8Array(rootModule.entryPointsHash);
-
-			function process(module: Module, trail: Module[]): void {
-				if (module.manualChunkAlias && colouredModules.has(module)) {
-					// this module has already been coloured as part of another manual chunk
-					return;
-				}
-
-				// TODO uncommenting fixes circular-entry-points but breaks others
-				// if (module !== rootModule && entryModules.some(a => a.rootModule === module)) {
-				// 	return;
-				// }
-
-				if (!module.manualChunkAlias && trailContainsColour(trail, module.entryPointsHash)) {
-					//
-				} else if (
-					module.manualChunkAlias ||
-					(!trailContainsColour(trail, module.entryPointsHash) &&
-						Uint8ArrayEqual(module.entryPointsHash, sourceColour))
-				) {
-					Uint8ArrayXor(module.entryPointsHash, paint);
-					// copyUint8Array(module.entryPointsHash, paint);
-					// console.log('colour', module.id.split('/').pop(), colour[0]);
-					colouredModules.add(module);
-					for (const dependency of module.dependencies) {
-						if (dependency instanceof Module) {
-							if (!module.manualChunkAlias) {
-								process(dependency, [...trail, module]);
-							} else if (!dependency.manualChunkAlias) {
-								dependency.manualChunkAlias = module.manualChunkAlias;
-								process(dependency, [...trail, module]);
-							}
-						}
-					}
-					for (const { resolution } of module.dynamicImports) {
-						if (
-							resolution instanceof Module &&
-							// TODO why this check?
-							resolution.dynamicallyImportedBy.length > 0 &&
-							!resolution.manualChunkAlias
-						) {
-							// registerNewEntryPoint(resolution, [...trail, module], module.entryPointsHash);
-							registerNewEntryPoint(resolution, [...trail, module], randomColour());
-						}
-					}
-				} else {
-					// TODO hack
-					registerNewEntryPoint(module, trail, trail[trail.length - 1].entryPointsHash);
-				}
-			}
-
-			process(rootModule, trail);
-		}
-
-		for (let i = 0; i < entryModules.length /* updates */; i++) {
-			const { paint, rootModule, trail } = entryModules[i];
-			_paintModule(rootModule, trail, paint);
-		}
-	}
-
-	const modules: Array<{ paint: Uint8Array; rootModule: Module }> = [];
+	const { dependentEntryPointsByModule, dynamicImportersByModule } = analyzeModuleGraph(
+		entryModules
+	);
+	const dynamicDependentEntryPointsByDynamicEntry: DependentModuleMap = getDynamicDependentEntryPoints(
+		dependentEntryPointsByModule,
+		dynamicImportersByModule
+	);
 
 	if (manualChunkModules) {
 		for (const chunkName of Object.keys(manualChunkModules)) {
-			const paint = randomColour();
+			const entryHash = randomUint8Array(10);
 
-			for (const module of manualChunkModules[chunkName]) {
-				if (!module.manualChunkAlias) {
-					throw new Error('Missing manualChunkAlias');
-				}
-				modules.push({ rootModule: module, paint });
+			for (const entry of manualChunkModules[chunkName]) {
+				addColourToModuleDependencies(
+					entry,
+					entryHash,
+					null,
+					dependentEntryPointsByModule,
+					dynamicDependentEntryPointsByDynamicEntry
+				);
 			}
 		}
 	}
 
-	for (const module of entryModules) {
-		modules.push({ rootModule: module, paint: randomColour() });
+	for (const entry of entryModules) {
+		if (!entry.manualChunkAlias) {
+			const entryHash = randomUint8Array(10);
+			addColourToModuleDependencies(
+				entry,
+				entryHash,
+				null,
+				dependentEntryPointsByModule,
+				dynamicDependentEntryPointsByDynamicEntry
+			);
+		}
 	}
 
-	paintModules(modules);
+	for (const entry of dynamicImportersByModule.keys()) {
+		const entryHash = randomUint8Array(10);
+		addColourToModuleDependencies(
+			entry,
+			entryHash,
+			dynamicDependentEntryPointsByDynamicEntry.get(entry)!,
+			dependentEntryPointsByModule,
+			dynamicDependentEntryPointsByDynamicEntry
+		);
+	}
+}
+
+function analyzeModuleGraph(
+	entryModules: Module[]
+): {
+	dependentEntryPointsByModule: DependentModuleMap;
+	dynamicImportersByModule: DependentModuleMap;
+} {
+	const dynamicImportersByModule: DependentModuleMap = new Map();
+	const dependentEntryPointsByModule: DependentModuleMap = new Map();
+	const entriesToHandle = new Set(entryModules);
+	for (const currentEntry of entriesToHandle) {
+		const modulesToHandle = new Set<Module>([currentEntry]);
+		for (const module of modulesToHandle) {
+			getDependentModules(dependentEntryPointsByModule, module).add(currentEntry);
+			for (const dependency of module.dependencies) {
+				if (!(dependency instanceof ExternalModule)) {
+					modulesToHandle.add(dependency);
+				}
+			}
+			for (const { resolution } of module.dynamicImports) {
+				if (
+					resolution instanceof Module &&
+					resolution.dynamicallyImportedBy.length > 0 &&
+					!resolution.manualChunkAlias
+				) {
+					getDependentModules(dynamicImportersByModule, resolution).add(module);
+					entriesToHandle.add(resolution);
+				}
+			}
+		}
+	}
+	return { dependentEntryPointsByModule, dynamicImportersByModule };
+}
+
+function getDependentModules(moduleMap: DependentModuleMap, module: Module): Set<Module> {
+	const dependentModules = moduleMap.get(module) || new Set();
+	moduleMap.set(module, dependentModules);
+	return dependentModules;
+}
+
+function getDynamicDependentEntryPoints(
+	dependentEntryPointsByModule: DependentModuleMap,
+	dynamicImportersByModule: DependentModuleMap
+): DependentModuleMap {
+	const dynamicDependentEntryPointsByDynamicEntry: DependentModuleMap = new Map();
+	for (const [dynamicEntry, importers] of dynamicImportersByModule.entries()) {
+		const dynamicDependentEntryPoints = getDependentModules(
+			dynamicDependentEntryPointsByDynamicEntry,
+			dynamicEntry
+		);
+		for (const importer of importers) {
+			for (const entryPoint of dependentEntryPointsByModule.get(importer)!) {
+				dynamicDependentEntryPoints.add(entryPoint);
+			}
+		}
+	}
+	return dynamicDependentEntryPointsByDynamicEntry;
+}
+
+function addColourToModuleDependencies(
+	entry: Module,
+	colour: Uint8Array,
+	dynamicDependentEntryPoints: Set<Module> | null,
+	dependentEntryPointsByModule: DependentModuleMap,
+	dynamicDependentEntryPointsByDynamicEntry: DependentModuleMap
+) {
+	const manualChunkAlias = entry.manualChunkAlias;
+	const modulesToHandle = new Set([entry]);
+	for (const module of modulesToHandle) {
+		if (manualChunkAlias) {
+			module.manualChunkAlias = manualChunkAlias;
+			module.entryPointsHash = colour;
+		} else if (
+			dynamicDependentEntryPoints &&
+			areEntryPointsContainedOrDynamicallyDependent(
+				dynamicDependentEntryPoints,
+				dependentEntryPointsByModule.get(module)!,
+				dynamicDependentEntryPointsByDynamicEntry
+			)
+		) {
+			continue;
+		} else {
+			Uint8ArrayXor(module.entryPointsHash, colour);
+		}
+		for (const dependency of module.dependencies) {
+			if (!(dependency instanceof ExternalModule || dependency.manualChunkAlias)) {
+				modulesToHandle.add(dependency);
+			}
+		}
+	}
+}
+
+function areEntryPointsContainedOrDynamicallyDependent(
+	entryPoints: Set<Module>,
+	superSet: Set<Module>,
+	dynamicDependentEntryPointsByDynamicEntry: DependentModuleMap
+): boolean {
+	for (const module of entryPoints) {
+		if (!superSet.has(module)) {
+			const dynamicDependentEntryPoints = dynamicDependentEntryPointsByDynamicEntry.get(module);
+			if (
+				!(
+					dynamicDependentEntryPoints &&
+					areEntryPointsContainedOrDynamicallyDependent(
+						dynamicDependentEntryPoints,
+						superSet,
+						dynamicDependentEntryPointsByDynamicEntry
+					)
+				)
+			) {
+				return false;
+			}
+		}
+	}
+	return true;
 }
