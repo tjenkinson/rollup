@@ -1,5 +1,5 @@
 module.exports = {
-	solo: true,
+	// solo: true,
 	description: 'multiple layers dynamic',
 	options: {
 		input: ['main']
