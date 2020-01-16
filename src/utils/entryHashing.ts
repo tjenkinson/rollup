@@ -18,18 +18,35 @@ export function Uint8ArrayToHexString(buffer: Uint8Array) {
 	return str;
 }
 
-export function Uint8ArrayXor(to: Uint8Array, from: Uint8Array) {
-	for (let i = 0; i < to.length; i++) to[i] = to[i] ^ from[i];
-	return to;
-}
-
 export function randomUint8Array(len: number) {
 	const buffer = new Uint8Array(len);
 	for (let i = 0; i < buffer.length; i++) buffer[i] = Math.random() * (2 << 8);
 	return buffer;
 }
 
+export function Uint8ArrayXor(to: Uint8Array, from: Uint8Array) {
+	for (let i = 0; i < to.length; i++) to[i] = to[i] ^ from[i];
+	return to;
+}
+
+export function cloneUint8Array(input: Uint8Array): Uint8Array {
+	const output = new Uint8Array(input.length);
+	for (let i = 0; i < output.length; i++) output[i] = input[i];
+	return output;
+}
+
+export function copyUint8Array(destinaton: Uint8Array, source: Uint8Array): Uint8Array {
+	if (destinaton.length !== source.length) {
+		throw new Error('Arrays are different sizes.');
+	}
+	for (let i = 0; i < destinaton.length; i++) destinaton[i] = source[i];
+	return source;
+}
+
 export function Uint8ArrayEqual(bufferA: Uint8Array, bufferB: Uint8Array) {
+	if (bufferA.length !== bufferB.length) {
+		return false;
+	}
 	for (let i = 0; i < bufferA.length; i++) {
 		if (bufferA[i] !== bufferB[i]) return false;
 	}
