@@ -1,1 +1,3 @@
-export { DYNAMIC_3 } from './generated-dynamic1.js';
+const DYNAMIC_3 = 'DYNAMIC_3';
+
+export { DYNAMIC_3 };

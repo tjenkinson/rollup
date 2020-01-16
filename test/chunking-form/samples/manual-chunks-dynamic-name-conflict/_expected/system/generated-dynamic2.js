@@ -8,8 +8,6 @@ System.register([], function (exports) {
 			const DYNAMIC_A = exports('DYNAMIC_A', 'DYNAMIC_A');
 			const DYNAMIC_B = exports('DYNAMIC_B', 'DYNAMIC_B');
 
-			console.log('dynamic1');
-
 		}
 	};
 });

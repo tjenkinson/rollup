@@ -2,7 +2,7 @@
 
 var dynamic = require('./generated-dynamic2.js');
 
-
+console.log('dynamic1');
 
 exports.DYNAMIC_A = dynamic.DYNAMIC_B;
 exports.DYNAMIC_B = dynamic.DYNAMIC_A;

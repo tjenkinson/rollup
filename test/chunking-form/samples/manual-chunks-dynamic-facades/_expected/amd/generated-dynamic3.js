@@ -1,7 +1,7 @@
-define(['exports', './generated-dynamic1'], function (exports, dynamic) { 'use strict';
+define(['exports'], function (exports) { 'use strict';
 
+	const DYNAMIC_3 = 'DYNAMIC_3';
 
-
-	exports.DYNAMIC_3 = dynamic.DYNAMIC_3;
+	exports.DYNAMIC_3 = DYNAMIC_3;
 
 });

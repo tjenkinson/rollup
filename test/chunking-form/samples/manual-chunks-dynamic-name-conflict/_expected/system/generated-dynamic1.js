@@ -9,7 +9,7 @@ System.register(['./generated-dynamic2.js'], function (exports) {
 		}],
 		execute: function () {
 
-
+			console.log('dynamic1');
 
 		}
 	};

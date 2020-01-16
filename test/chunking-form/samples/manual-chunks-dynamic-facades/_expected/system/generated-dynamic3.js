@@ -1,12 +1,9 @@
-System.register(['./generated-dynamic1.js'], function (exports) {
+System.register([], function (exports) {
 	'use strict';
 	return {
-		setters: [function (module) {
-			exports('DYNAMIC_3', module.DYNAMIC_3);
-		}],
 		execute: function () {
 
-
+			const DYNAMIC_3 = exports('DYNAMIC_3', 'DYNAMIC_3');
 
 		}
 	};

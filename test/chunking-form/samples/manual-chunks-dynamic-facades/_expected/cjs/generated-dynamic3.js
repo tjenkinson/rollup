@@ -1,7 +1,5 @@
 'use strict';
 
-var dynamic = require('./generated-dynamic1.js');
+const DYNAMIC_3 = 'DYNAMIC_3';
 
-
-
-exports.DYNAMIC_3 = dynamic.DYNAMIC_3;
+exports.DYNAMIC_3 = DYNAMIC_3;
