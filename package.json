@@ -64,7 +64,7 @@
   },
   "homepage": "https://github.com/rollup/rollup",
   "dependencies": {
-    "@types/estree": "*",
+    "@types/estree": "0.0.42",
     "@types/node": "*",
     "acorn": "^7.1.0"
   },
