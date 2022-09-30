@@ -66,7 +66,7 @@
   "dependencies": {
     "@types/estree": "*",
     "@types/node": "*",
-    "acorn": "^7.1.0"
+    "acorn": "^7.1.1"
   },
   "devDependencies": {
     "@types/chokidar": "^2.1.3",
